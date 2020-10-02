@@ -3788,6 +3788,15 @@ BPF_CALL_2(bpf_xdp_set_current_frag, struct xdp_buff *, xdp, u32, fragment)
 	if (fragment > sinfo->nr_frags)
 		return -EINVAL;
 
+	if (fragment == 0) {
+		xdp->mb_data = NULL;
+		xdp->mb_data_end = NULL;
+	} else {
+		xdp->mb_data = skb_frag_address(&sinfo->frags[fragment - 1]);
+		xdp->mb_data_end = xdp->mb_data +
+			skb_frag_size(&sinfo->frags[fragment - 1]);
+	}
+
 	xdp->mb_frag = fragment;
 	return 0;
 }
@@ -8778,9 +8787,47 @@ static u32 xdp_convert_ctx_access(enum bpf_access_type type,
 
 	switch (si->off) {
 	case offsetof(struct xdp_md, data):
-		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff, data),
-				      si->dst_reg, si->src_reg,
-				      offsetof(struct xdp_buff, data));
+		if (si->dst_reg != si->src_reg) {
+			*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff,
+							       mb_data),
+					      si->dst_reg, si->src_reg,
+					      offsetof(struct xdp_buff,
+						       mb_data));
+			/* if (dst_reg != NULL) goto A */
+			*insn++ = BPF_JMP_IMM(BPF_JNE, si->dst_reg, 0, 1);
+			*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff,
+							       data),
+					      si->dst_reg, si->src_reg,
+					      offsetof(struct xdp_buff,
+						       data));
+			/* A: */
+		} else {
+			int reg = BPF_REG_9;
+
+			if (si->src_reg == reg)
+				reg--;
+
+			*insn++ = BPF_STX_MEM(BPF_DW, si->src_reg, reg,
+					      offsetof(struct xdp_buff,
+						       tmp_reg));
+			*insn++ = BPF_MOV64_REG(reg, si->src_reg);
+			*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff,
+							       mb_data),
+					      si->dst_reg, reg,
+					      offsetof(struct xdp_buff,
+						       mb_data));
+			/* if (dst_reg != NULL) goto A */
+			*insn++ = BPF_JMP_IMM(BPF_JNE, si->dst_reg, 0, 1);
+			*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff,
+							       data),
+					      si->dst_reg, reg,
+					      offsetof(struct xdp_buff,
+						       data));
+			/* A: */
+			*insn++ = BPF_LDX_MEM(BPF_DW, reg, reg,
+					      offsetof(struct xdp_buff,
+						       tmp_reg));
+		}
 		break;
 	case offsetof(struct xdp_md, data_meta):
 		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff, data_meta),
@@ -8788,9 +8835,47 @@ static u32 xdp_convert_ctx_access(enum bpf_access_type type,
 				      offsetof(struct xdp_buff, data_meta));
 		break;
 	case offsetof(struct xdp_md, data_end):
-		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff, data_end),
-				      si->dst_reg, si->src_reg,
-				      offsetof(struct xdp_buff, data_end));
+		if (si->dst_reg != si->src_reg) {
+			*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff,
+							       mb_data_end),
+					      si->dst_reg, si->src_reg,
+					      offsetof(struct xdp_buff,
+						       mb_data_end));
+			/* if (dst_reg != NULL) goto A */
+			*insn++ = BPF_JMP_IMM(BPF_JNE, si->dst_reg, 0, 1);
+			*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff,
+							       data_end),
+					      si->dst_reg, si->src_reg,
+					      offsetof(struct xdp_buff,
+						       data_end));
+			/* A: */
+		} else {
+			int reg = BPF_REG_9;
+
+			if (si->src_reg == reg)
+				reg--;
+
+			*insn++ = BPF_STX_MEM(BPF_DW, si->src_reg, reg,
+					      offsetof(struct xdp_buff,
+						       tmp_reg));
+			*insn++ = BPF_MOV64_REG(reg, si->src_reg);
+			*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff,
+							       mb_data_end),
+					      si->dst_reg, reg,
+					      offsetof(struct xdp_buff,
+						       mb_data_end));
+			/* if (dst_reg != NULL) goto A */
+			*insn++ = BPF_JMP_IMM(BPF_JNE, si->dst_reg, 0, 1);
+			*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff,
+							       data_end),
+					      si->dst_reg, reg,
+					      offsetof(struct xdp_buff,
+						       data_end));
+			/* A: */
+			*insn++ = BPF_LDX_MEM(BPF_DW, reg, reg,
+					      offsetof(struct xdp_buff,
+						       tmp_reg));
+		}
 		break;
 	case offsetof(struct xdp_md, ingress_ifindex):
 		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct xdp_buff, rxq),

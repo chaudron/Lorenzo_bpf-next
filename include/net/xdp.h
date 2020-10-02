@@ -86,12 +86,23 @@ struct xdp_buff {
 #endif
 #define MB_OFFSET()	 offsetof(struct xdp_buff, __u32_bit_fields_offset)
 #define MB_FRAG_OFFSET() offsetof(struct xdp_buff, __u32_bit_fields_offset)
+
 	/* private: */
 	u32 __u32_bit_fields_offset[0];
 	/* public: */
 	u32 frame_sz:23; /* frame size to deduce data_hard_end/reserved tailroom */
 	u32 mb:1;	 /* xdp non-linear buffer */
 	u32 mb_frag:8;
+	/* We set a pointer to the current frag_data and frag_data_end as
+	 * calculating it in xdp_convert_ctx_access() will require an
+	 * additional scratch register.
+	 */
+	void *mb_data;
+	void *mb_data_end;
+	/* Temporary "register" to make conditional stores possible in cases
+	 * where the source and destination registers are the same.
+	 */
+	u64   tmp_reg;
 };
 
 /* Reserve memory area at end-of data area.

@@ -732,6 +732,8 @@ static __always_inline u32 bpf_prog_run_xdp(const struct bpf_prog *prog,
 	 * it's not necessary here anymore.
 	 */
 	xdp->mb_frag = 0;
+	xdp->mb_data = NULL;
+	xdp->mb_data_end = NULL;
 	return __BPF_PROG_RUN(prog, xdp, BPF_DISPATCHER_FUNC(xdp));
 }
 
