@@ -3777,6 +3777,29 @@ const struct bpf_func_proto bpf_xdp_get_frags_total_size_proto = {
 	.arg1_type	= ARG_PTR_TO_CTX,
 };
 
+BPF_CALL_2(bpf_xdp_set_current_frag, struct xdp_buff *, xdp, u32, fragment)
+{
+	struct skb_shared_info *sinfo;
+
+	if (!xdp->mb)
+		return -EINVAL;
+
+	sinfo = xdp_get_shared_info_from_buff(xdp);
+	if (fragment > sinfo->nr_frags)
+		return -EINVAL;
+
+	xdp->mb_frag = fragment;
+	return 0;
+}
+
+static const struct bpf_func_proto bpf_xdp_set_current_frag_proto = {
+	.func		= bpf_xdp_set_current_frag,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_CTX,
+	.arg2_type	= ARG_ANYTHING,
+};
+
 BPF_CALL_2(bpf_xdp_adjust_tail, struct xdp_buff *, xdp, int, offset)
 {
 	void *data_hard_end = xdp_data_hard_end(xdp); /* use xdp->frame_sz */
@@ -6794,6 +6817,7 @@ bool bpf_helper_changes_pkt_data(void *func)
 	    func == bpf_msg_push_data ||
 	    func == bpf_msg_pop_data ||
 	    func == bpf_xdp_adjust_tail ||
+	    func == bpf_xdp_set_current_frag ||
 #if IS_ENABLED(CONFIG_IPV6_SEG6_BPF)
 	    func == bpf_lwt_seg6_store_bytes ||
 	    func == bpf_lwt_seg6_adjust_srh ||
@@ -7134,6 +7158,8 @@ xdp_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_xdp_get_frags_count_proto;
 	case BPF_FUNC_xdp_get_frags_total_size:
 		return &bpf_xdp_get_frags_total_size_proto;
+	case BPF_FUNC_xdp_set_current_frag:
+		return &bpf_xdp_set_current_frag_proto;
 	case BPF_FUNC_fib_lookup:
 		return &bpf_xdp_fib_lookup_proto;
 #ifdef CONFIG_INET

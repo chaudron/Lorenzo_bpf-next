@@ -3680,6 +3680,20 @@ union bpf_attr {
  *		Get the total size of fragments for a given xdp multi-buffer.
  *	Return
  *		The total size of fragments for a given xdp multi-buffer.
+ *
+ * int bpf_xdp_set_current_frag(struct xdp_buff *xdp_md, u32 fragment)
+ *	Description
+ *		Set the current fragment pointed to by data and its
+ *              corresponding data_len.
+ *
+ *		A call to this helper is susceptible to change the underlying
+ *		packet buffer. Therefore, at load time, all checks on pointers
+ *		previously done by the verifier are invalidated and must be
+ *		performed again, if the helper is used in combination with
+ *		direct packet access.
+ *
+ *	Return
+ *		0 on success, or a negative error in case of failure.
  */
 #define __BPF_FUNC_MAPPER(FN)		\
 	FN(unspec),			\
@@ -3837,6 +3851,7 @@ union bpf_attr {
 	FN(redirect_neigh),		\
 	FN(xdp_get_frags_count),	\
 	FN(xdp_get_frags_total_size),	\
+	FN(xdp_set_current_frag),	\
 	/* */
 
 /* integer value in 'imm' field of BPF_CALL instruction selects which helper
