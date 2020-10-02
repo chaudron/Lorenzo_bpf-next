@@ -72,8 +72,26 @@ struct xdp_buff {
 	void *data_hard_start;
 	struct xdp_rxq_info *rxq;
 	struct xdp_txq_info *txq;
-	u32 frame_sz:31; /* frame size to deduce data_hard_end/reserved tailroom*/
-	u32 mb:1; /* xdp non-linear buffer */
+
+#ifdef __BIG_ENDIAN_BITFIELD
+#define MB_SHIFT	 8
+#define MB_MASK		 0x00000100
+#define MB_FRAG_SHIFT	 0
+#define MB_FRAG_MASK	 0x000000ff
+#else
+#define MB_SHIFT	 23
+#define MB_MASK		 0x00800000
+#define MB_FRAG_SHIFT	 24
+#define MB_FRAG_MASK	 0xff000000
+#endif
+#define MB_OFFSET()	 offsetof(struct xdp_buff, __u32_bit_fields_offset)
+#define MB_FRAG_OFFSET() offsetof(struct xdp_buff, __u32_bit_fields_offset)
+	/* private: */
+	u32 __u32_bit_fields_offset[0];
+	/* public: */
+	u32 frame_sz:23; /* frame size to deduce data_hard_end/reserved tailroom */
+	u32 mb:1;	 /* xdp non-linear buffer */
+	u32 mb_frag:8;
 };
 
 /* Reserve memory area at end-of data area.

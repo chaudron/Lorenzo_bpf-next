@@ -8794,6 +8794,22 @@ static u32 xdp_convert_ctx_access(enum bpf_access_type type,
 		*insn++ = BPF_LDX_MEM(BPF_W, si->dst_reg, si->dst_reg,
 				      offsetof(struct net_device, ifindex));
 		break;
+	case offsetof(struct xdp_md, mb):
+		*insn++ = BPF_LDX_MEM(BPF_W, si->dst_reg, si->src_reg,
+				      MB_OFFSET());
+		*insn++ = BPF_ALU32_IMM(BPF_AND, si->dst_reg, MB_MASK);
+		if (MB_SHIFT)
+			*insn++ = BPF_ALU32_IMM(BPF_RSH, si->dst_reg,
+						MB_SHIFT);
+		break;
+	case offsetof(struct xdp_md, mb_frag):
+		*insn++ = BPF_LDX_MEM(BPF_W, si->dst_reg, si->src_reg,
+				      MB_FRAG_OFFSET());
+		*insn++ = BPF_ALU32_IMM(BPF_AND, si->dst_reg, MB_FRAG_MASK);
+		if (MB_FRAG_SHIFT)
+			*insn++ = BPF_ALU32_IMM(BPF_RSH, si->dst_reg,
+						MB_FRAG_SHIFT);
+		break;
 	}
 
 	return insn - insn_buf;
