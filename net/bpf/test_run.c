@@ -722,8 +722,14 @@ int bpf_prog_test_run_xdp(struct bpf_prog *prog, const union bpf_attr *kattr,
 	if (ret)
 		goto out;
 
-	if (xdp.data != data + headroom || xdp.data_end != xdp.data + size)
-		size += xdp.data_end - xdp.data - data_len;
+
+	if (xdp.mb)
+		size = xdp.data_end - xdp.data +
+			bpf_test_get_buff_data_len(sinfo);
+	else
+		if (xdp.data != data + headroom ||
+		    xdp.data_end != xdp.data + size)
+			size += xdp.data_end - xdp.data - data_len;
 
 	ret = bpf_test_finish(kattr, uattr, xdp.data, sinfo, size, retval,
 			      duration);

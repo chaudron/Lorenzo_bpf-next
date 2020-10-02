@@ -3711,12 +3711,35 @@ static unsigned long xdp_get_metalen(const struct xdp_buff *xdp)
 	       xdp->data - xdp->data_meta;
 }
 
+static int bpf_xdp_adjust_frag_head(struct xdp_buff *xdp, int offset)
+{
+	struct skb_shared_info *sinfo = xdp_get_shared_info_from_buff(xdp);
+	skb_frag_t *frag;
+	int new_off;
+
+	if (xdp->mb_frag > sinfo->nr_frags)
+		return -EINVAL;
+
+	frag = &sinfo->frags[xdp->mb_frag - 1];
+	new_off = skb_frag_off(frag) + offset;
+
+	if (new_off < 0 || new_off >= PAGE_SIZE)
+		return -EINVAL;
+
+	skb_frag_off_set(frag, new_off);
+	skb_frag_size_add(frag, -offset);
+	return 0;
+}
+
 BPF_CALL_2(bpf_xdp_adjust_head, struct xdp_buff *, xdp, int, offset)
 {
 	void *xdp_frame_end = xdp->data_hard_start + sizeof(struct xdp_frame);
 	unsigned long metalen = xdp_get_metalen(xdp);
 	void *data_start = xdp_frame_end + metalen;
 	void *data = xdp->data + offset;
+
+	if (unlikely(xdp->mb_frag))
+		return bpf_xdp_adjust_frag_head(xdp, offset);
 
 	if (unlikely(data < data_start ||
 		     data > xdp->data_end - ETH_HLEN))
@@ -3809,10 +3832,36 @@ static const struct bpf_func_proto bpf_xdp_set_current_frag_proto = {
 	.arg2_type	= ARG_ANYTHING,
 };
 
+static int bpf_xdp_adjust_frag_tail(struct xdp_buff *xdp, int offset)
+{
+	struct skb_shared_info *sinfo = xdp_get_shared_info_from_buff(xdp);
+	skb_frag_t *frag;
+	int new_size;
+
+	if (xdp->mb_frag > sinfo->nr_frags)
+		return -EINVAL;
+
+	frag = &sinfo->frags[xdp->mb_frag - 1];
+	new_size = skb_frag_size(frag) + offset;
+
+	if (new_size < 0 || (new_size + skb_frag_off(frag)) >= PAGE_SIZE)
+		return -EINVAL;
+
+	if (offset > 0)
+		memset(skb_frag_address(frag) + skb_frag_size(frag), 0,
+		       offset);
+
+	skb_frag_size_set(frag, new_size);
+	return 0;
+}
+
 BPF_CALL_2(bpf_xdp_adjust_tail, struct xdp_buff *, xdp, int, offset)
 {
 	void *data_hard_end = xdp_data_hard_end(xdp); /* use xdp->frame_sz */
 	void *data_end = xdp->data_end + offset;
+
+	if (unlikely(xdp->mb_frag))
+		return bpf_xdp_adjust_frag_tail(xdp, offset);
 
 	/* Notice that xdp_data_hard_end have reserved some tailroom */
 	if (unlikely(data_end > data_hard_end))
