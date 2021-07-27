@@ -4682,9 +4682,10 @@ static const struct bpf_func_proto bpf_sk_ancestor_cgroup_id_proto = {
 static unsigned long bpf_xdp_copy(void *dst_buff, const void *ctx,
 				  unsigned long off, unsigned long len)
 {
+	unsigned long base_len, copy_len, frag_off_total;
 	struct xdp_buff *xdp = (struct xdp_buff *)ctx;
 	struct skb_shared_info *sinfo;
-	unsigned long base_len;
+	int i;
 
 	if (likely(!xdp_buff_is_mb(xdp))) {
 		memcpy(dst_buff, xdp->data + off, len);
@@ -4692,42 +4693,37 @@ static unsigned long bpf_xdp_copy(void *dst_buff, const void *ctx,
 	}
 
 	base_len = xdp->data_end - xdp->data;
+	frag_off_total = base_len;
 	sinfo = xdp_get_shared_info_from_buff(xdp);
-	do {
-		const void *src_buff = NULL;
-		unsigned long copy_len = 0;
 
-		if (off < base_len) {
-			src_buff = xdp->data + off;
-			copy_len = min(len, base_len - off);
-		} else {
-			unsigned long frag_off_total = base_len;
-			int i;
+	/* If we need to copy data from the base buffer do it */
+	if (off < base_len) {
+		copy_len = min(len, base_len - off);
+		memcpy(dst_buff, xdp->data + off, copy_len);
 
-			for (i = 0; i < sinfo->nr_frags; i++) {
-				skb_frag_t *frag = &sinfo->frags[i];
-				unsigned long frag_len, frag_off;
-
-				frag_len = skb_frag_size(frag);
-				frag_off = off - frag_off_total;
-				if (frag_off < frag_len) {
-					src_buff = skb_frag_address(frag) +
-						   frag_off;
-					copy_len = min(len,
-						       frag_len - frag_off);
-					break;
-				}
-				frag_off_total += frag_len;
-			}
-		}
-		if (!src_buff)
-			break;
-
-		memcpy(dst_buff, src_buff, copy_len);
 		off += copy_len;
 		len -= copy_len;
 		dst_buff += copy_len;
-	} while (len);
+	}
+
+	/* Copy any remaining data from the fragments */
+	for (i = 0; len && i < sinfo->nr_frags; i++) {
+		skb_frag_t *frag = &sinfo->frags[i];
+		unsigned long frag_len, frag_off;
+
+		frag_len = skb_frag_size(frag);
+		frag_off = off - frag_off_total;
+		if (frag_off < frag_len) {
+			copy_len = min(len, frag_len - frag_off);
+			memcpy(dst_buff,
+			       skb_frag_address(frag) + frag_off, copy_len);
+
+			off += copy_len;
+			len -= copy_len;
+			dst_buff += copy_len;
+		}
+		frag_off_total += frag_len;
+	}
 
 	return 0;
 }
