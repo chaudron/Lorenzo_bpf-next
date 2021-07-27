@@ -5,6 +5,8 @@
 #include "test_xdp.skel.h"
 #include "test_xdp_bpf2bpf.skel.h"
 
+#define PKT_BUFFER_SIZE 9000
+
 struct meta {
 	int ifindex;
 	int pkt_len;
@@ -66,14 +68,14 @@ static int run_xdp_bpf2bpf_pkt_size(int pkt_fd, struct perf_buffer *pb,
 	__u8 *buf, *buf_in;
 	int err, ret = 0;
 
-	if (pkt_size > sizeof(buf_in) || pkt_size < sizeof(pkt_v4))
+	if (pkt_size > PKT_BUFFER_SIZE || pkt_size < sizeof(pkt_v4))
 		return -EINVAL;
 
-	buf_in = malloc(9000);
+	buf_in = malloc(PKT_BUFFER_SIZE);
 	if (CHECK(!buf_in, "buf_in malloc()", "error:%s\n", strerror(errno)))
 		return -ENOMEM;
 
-	buf = malloc(9000);
+	buf = malloc(PKT_BUFFER_SIZE);
 	if (CHECK(!buf, "buf malloc()", "error:%s\n", strerror(errno))) {
 		ret = -ENOMEM;
 		goto free_buf_in;
