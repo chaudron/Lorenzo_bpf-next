@@ -26,6 +26,9 @@ int _xdp_adjust_frags(struct xdp_md *xdp)
 	if (data_len < 0)
 		return XDP_DROP;
 
+	if (data_len > 5000)
+		goto out;
+
 	data_end = (void *)(long)xdp->data_end;
 	data = (void *)(long)xdp->data;
 	offset -= data_len; /* offset in frag0 */
